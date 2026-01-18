@@ -19,12 +19,16 @@ fn main() -> eframe::Result<()> {
 // アプリの状態を保持する構造体
 struct RecorderApp{
     is_recording: bool,
+    recording_title: String,
+    audio_data: Vec<f32>,
 }
 
 impl Default for RecorderApp {
     fn default() -> Self {
         Self{
             is_recording: false,
+            recording_title: "エピソード名未設定".to_owned(),
+            audio_data: Vec::new(),
         }
     }
 }
@@ -34,6 +38,17 @@ impl eframe::App for RecorderApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame){
         egui::CentralPanel::default().show(ctx, |ui|{
             ui.heading("ポッドキャスターのためのレコーダー");
+
+            // エピソード名の入力
+            ui.add_enabled_ui(!self.is_recording, |ui|{
+                ui.horizontal(|ui|{
+                    ui.label("エピソード名");
+                    ui.text_edit_singleline(&mut self.recording_title);
+                });
+            });
+
+
+            ui.separator();
 
             // ここにUIを追加
             if ui.button("録音を開始する").clicked(){
