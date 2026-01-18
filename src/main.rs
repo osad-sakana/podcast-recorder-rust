@@ -1,6 +1,9 @@
 use eframe::egui;
+use cpal::traits::{HostTrait, DeviceTrait};
 
 fn main() -> eframe::Result<()> {
+    print_input_devices();
+
     // Windowの初期設定
     let native_options = eframe::NativeOptions::default();
 
@@ -80,4 +83,21 @@ fn setup_custom_fonts(ctx: &egui::Context) {
 
     // 3. コンテキストに変換
     ctx.set_fonts(fonts);
+}
+
+fn print_input_devices(){
+    let host = cpal::default_host();
+    let devices = host.input_devices().expect("入力デバイスが見つかりません。");
+
+    println!("利用可能なマイク一覧: ");
+    for device in devices {
+        let name = device
+            .description()
+            .map(|d| d.name().to_string())
+            .unwrap_or_else(|_|{
+                "不明なデバイス".to_string()
+            });
+
+        println!("  - {}", name);
+    }
 }
