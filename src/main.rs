@@ -1,5 +1,6 @@
 use eframe::egui;
-use cpal::traits::{HostTrait, DeviceTrait};
+use cpal::traits::{HostTrait, DeviceTrait, StreamTrait};
+use std::sync::{Arc, Mutex};
 
 fn main() -> eframe::Result<()> {
     print_input_devices();
@@ -7,13 +8,47 @@ fn main() -> eframe::Result<()> {
     // Windowの初期設定
     let native_options = eframe::NativeOptions::default();
 
+    // audio_dataの初期化
+    let audio_data: Arc<Mutex<Vec<f32>>> = Arc::new(Mutex::new(Vec::new()));
+    let audio_data_for_thread = Arc::clone(&audio_data);
+
+    std::thread::spawn(move || {
+        println!("録音スレッド開始");
+        let device = cpal::default_host().default_input_device().expect("デバイスの取得に失敗");
+        let config = device.default_input_config().expect("設定の取得に失敗");
+        let stream = device.build_input_stream(
+            &config.into(),
+            move |data: &[f32], _: &cpal::InputCallbackInfo| {
+                // ロックを取得
+                if let Ok(mut storage) = audio_data_for_thread.lock(){
+                    // 届いた音データをベクタに追加
+                    storage.extend_from_slice(data);
+                }
+            },
+            move |err| {
+                eprintln!("録音エラー: {}", err);
+            },
+            None
+        ).expect("ストリームの作成に失敗");
+
+        stream.play().expect("ストリームの再生に失敗");
+
+        loop{
+            std::thread::sleep(std::time::Duration::from_millis(100));
+        }
+    });
+
+    let app = RecorderApp{
+        audio_data: Arc::clone(&audio_data), // appに共有データを渡す
+        ..RecorderApp::default()
+    };
+
     // アプリの起動
     eframe::run_native(
         "Podcast Recorder by Osada",
         native_options,
-        Box::new(|cc| {
+        Box::new(move |cc| {
             setup_custom_fonts(&cc.egui_ctx);
-            let app = RecorderApp::default();
             Ok(Box::new(app))
         }),
     )
@@ -23,7 +58,7 @@ fn main() -> eframe::Result<()> {
 struct RecorderApp{
     is_recording: bool,
     recording_title: String,
-    audio_data: Vec<f32>,
+    audio_data: Arc<Mutex<Vec<f32>>>,
 }
 
 impl Default for RecorderApp {
@@ -31,7 +66,7 @@ impl Default for RecorderApp {
         Self{
             is_recording: false,
             recording_title: "エピソード名未設定".to_owned(),
-            audio_data: Vec::new(),
+            audio_data: Arc::new(Mutex::new(Vec::new())),
         }
     }
 }
