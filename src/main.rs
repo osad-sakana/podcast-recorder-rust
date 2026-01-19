@@ -11,6 +11,9 @@ fn main() -> eframe::Result<()> {
     // audio_dataの初期化
     let audio_data: Arc<Mutex<Vec<f32>>> = Arc::new(Mutex::new(Vec::new()));
     let audio_data_for_thread = Arc::clone(&audio_data);
+    let is_recording: Arc<Mutex<bool>> = Arc::new(Mutex::new(false));
+    let is_recording_for_thread = Arc::clone(&is_recording);
+
 
     std::thread::spawn(move || {
         println!("録音スレッド開始");
@@ -19,10 +22,17 @@ fn main() -> eframe::Result<()> {
         let stream = device.build_input_stream(
             &config.into(),
             move |data: &[f32], _: &cpal::InputCallbackInfo| {
-                // ロックを取得
-                if let Ok(mut storage) = audio_data_for_thread.lock(){
-                    // 届いた音データをベクタに追加
-                    storage.extend_from_slice(data);
+                let is_recording = if let Ok(lock) = is_recording_for_thread.lock(){
+                    *lock
+                }else{
+                    false
+                };
+
+                if is_recording{
+                    if let Ok(mut storage) = audio_data_for_thread.lock(){
+                        // 届いた音データをベクタに追加
+                        storage.extend_from_slice(data);
+                    }
                 }
             },
             move |err| {
@@ -40,6 +50,7 @@ fn main() -> eframe::Result<()> {
 
     let app = RecorderApp{
         audio_data: Arc::clone(&audio_data), // appに共有データを渡す
+        is_recording_shared: Arc::clone(&is_recording),
         ..RecorderApp::default()
     };
 
@@ -59,6 +70,7 @@ struct RecorderApp{
     is_recording: bool,
     recording_title: String,
     audio_data: Arc<Mutex<Vec<f32>>>,
+    is_recording_shared: Arc<Mutex<bool>>,
 }
 
 impl Default for RecorderApp {
@@ -67,6 +79,7 @@ impl Default for RecorderApp {
             is_recording: false,
             recording_title: "エピソード名未設定".to_owned(),
             audio_data: Arc::new(Mutex::new(Vec::new())),
+            is_recording_shared: Arc::new(Mutex::new(false)),
         }
     }
 }
